@@ -11,9 +11,8 @@ use mongodb::Collection;
 
 // Supabase dependencies:
 use postgrest::Postgrest;
-use dotenv::dotenv;
-use serde_json::{json, Value};
-use serde::ser::StdError;
+// use serde_json::{json, Value};
+// use serde::ser::StdError;
 
 // Near Protocol dependencies:
 use near_jsonrpc_client::methods;
@@ -21,6 +20,9 @@ use near_jsonrpc_client::JsonRpcClient;
 use near_jsonrpc_primitives::types::query::QueryResponseKind;
 use near_primitives::types::{AccountId, BlockReference, Finality};
 use near_primitives::views::QueryRequest;
+
+// use std::fmt;
+
 
 // MongoDB Structs:
 #[derive(Serialize, Deserialize, Debug)]
@@ -56,7 +58,8 @@ pub struct Employee {
 
 // Main function without special formatting or tokio::spawn :
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+// async fn main() -> Result<(), Box<dyn Error>> {
+    async fn main() -> Result<(), mongodb::error::Error> {
 
     let output_1 = 
         near_get_account().await;
@@ -65,8 +68,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let output_3 = 
         mongo_db_get().await;
 
-    println!("{:?}, {:?}, {:?}", output_1, output_2, output_3);
-
+    format!("{:?}, {:?}, {:?}", output_1, output_2, output_3);
 // To add: concurrency, narrowing filters and formatting for output.
 
     Ok(())
@@ -91,8 +93,12 @@ async fn near_get_account() -> Result<(), Box<dyn Error>> {
 
     let response = client.call(request).await?;
 
+    // if let QueryResponseKind::ViewAccount(result) = response.kind {
+    //     println!("Account: {} // Yocto: {:#?}", cloned_account, result.amount);
+    // }
     if let QueryResponseKind::ViewAccount(result) = response.kind {
-        println!("Account: {} // Yocto: {:#?}", cloned_account, result.amount);
+        println!("This is Near Account: {}, with the amount 
+        of Yocto Near at {:#?}.  ", cloned_account, result.amount);
     }
 
     Ok(())
@@ -108,6 +114,7 @@ async fn supabase_get_employees() -> Result<(), Box<dyn Error>> {
     // simple SQL wildcard query for all results in Employees..
     let resp = client
     .from("employees")
+    .eq("first_name", "Lubo")
     .select("*")
     .execute()
     .await?;
@@ -123,7 +130,8 @@ async fn supabase_get_employees() -> Result<(), Box<dyn Error>> {
 
     // iterates thru the vec individual employees w/ desired fields
     for result in employees {
-    println!("Employee: {} // Age: {}, // Interests: {} // City: {} //",
+    println!("This Near account holder's name is {}, 
+    his age is {}, interest is {} and he lives in {}.  ",
         result.first_name,
         result.age,
         result.interests,
@@ -149,18 +157,24 @@ async fn mongo_db_get() -> Result<(), Box<dyn Error>> {
     // uses sample movie database to ping server:
     let db = client.database("sample_mflix");
     db.run_command(doc! {"ping": 1}, None).await?;
-    println!("Connected to movies database successfully");
+    // println!("Connected to movies database successfully");
 
     // stage 2: query the movies list first ten:
   
     let movies: Collection<Movie> = db.collection("movies");
 
     // group the movies by year released as ID;
+    // let stage_filter_valid_years = doc! {
+    //     "$match": {
+    //         "year": {
+    //             "$type": "number",
+    //         }
+    //     }
+    // };
+
     let stage_filter_valid_years = doc! {
         "$match": {
-            "year": {
-                "$type": "number",
-            }
+            "year": 1909
         }
     };
     // movie count and title
@@ -175,6 +189,7 @@ async fn mongo_db_get() -> Result<(), Box<dyn Error>> {
     let stage_sort_year_ascending = doc! {
         "$sort": {"_id": 1}
     };
+
     // limit 15 "year" entries
     let limit = doc! {
         "$limit": 10
@@ -190,11 +205,14 @@ async fn mongo_db_get() -> Result<(), Box<dyn Error>> {
 
     let mut results = movies.aggregate(pipeline, None).await?;
 
-    while let Some(result) = results.next().await {
+        while let Some(result) = results.next().await {
             let doc: YearSummary = bson::from_document(result?)?;
-            println!("* // {:?} // {:?} {:?} //", doc._id, doc.movie_count, doc.movie_titles);
+            println!("He prefers movies from the year {:?}, 
+            such as {:?} called {:?}. //", doc._id, doc.movie_count, 
+            doc.movie_titles[0]);
 
     }
+
     Ok(())
 
 
